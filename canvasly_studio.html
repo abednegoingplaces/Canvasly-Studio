@@ -1,0 +1,397 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+#studio{display:flex;height:680px;background:#0e0e0e;font-family:var(--font-sans);border-radius:var(--border-radius-lg);overflow:hidden;position:relative}
+#canvas-area{flex:1;position:relative;overflow:hidden;cursor:crosshair}
+#canvas-bg{position:absolute;inset:0;background:radial-gradient(ellipse at 30% 40%,#1a0a2e 0%,#0e0e0e 60%)}
+.grid-lines{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:40px 40px}
+#sidebar{width:260px;background:#161616;border-left:1px solid #2a2a2a;display:flex;flex-direction:column;overflow-y:auto;z-index:10}
+.sb-section{padding:14px 16px;border-bottom:1px solid #222}
+.sb-title{font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:#555;margin-bottom:10px}
+.tool-row{display:flex;gap:6px;flex-wrap:wrap}
+.tool-btn{background:#1f1f1f;border:1px solid #2e2e2e;color:#aaa;font-size:12px;padding:6px 10px;border-radius:6px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.tool-btn:hover{background:#2a2a2a;color:#eee;border-color:#444}
+.tool-btn.active{background:#6c3fff22;border-color:#6c3fff;color:#a78bfa}
+.sb-label{font-size:12px;color:#666;margin-bottom:4px;margin-top:10px}
+.sb-label:first-child{margin-top:0}
+input[type=range]{width:100%;height:3px;appearance:none;background:#2a2a2a;border-radius:2px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{appearance:none;width:14px;height:14px;border-radius:50%;background:#6c3fff;cursor:pointer;border:2px solid #0e0e0e}
+input[type=color]{width:100%;height:28px;border:none;background:none;cursor:pointer;border-radius:4px;padding:0}
+select{width:100%;background:#1f1f1f;border:1px solid #2e2e2e;color:#aaa;font-size:12px;padding:6px 8px;border-radius:6px;outline:none;cursor:pointer}
+select:focus{border-color:#6c3fff}
+.val-badge{font-size:11px;color:#555;float:right}
+.canvas-el{position:absolute;cursor:grab;user-select:none;will-change:transform}
+.canvas-el:active{cursor:grabbing}
+.canvas-el.selected{outline:2px solid #6c3fff;outline-offset:2px}
+.resize-handle{position:absolute;width:10px;height:10px;background:#6c3fff;border-radius:50%;bottom:-5px;right:-5px;cursor:se-resize;z-index:5}
+.layer-item{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;transition:background .1s}
+.layer-item:hover{background:#1f1f1f}
+.layer-item.active{background:#6c3fff15;color:#a78bfa}
+.layer-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.del-btn{margin-left:auto;background:none;border:none;color:#555;cursor:pointer;font-size:14px;padding:2px 4px;border-radius:3px;line-height:1}
+.del-btn:hover{color:#f87171;background:#3f1515}
+#toast{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:#6c3fff;color:#fff;font-size:12px;padding:7px 16px;border-radius:20px;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;z-index:100}
+.hint-text{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;transition:opacity .3s}
+.hint-text h3{font-size:20px;font-weight:400;color:#333;margin-bottom:8px}
+.hint-text p{font-size:13px;color:#2a2a2a}
+.color-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+.color-swatch{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:border-color .15s}
+.color-swatch:hover,.color-swatch.picked{border-color:#fff}
+.apply-btn{width:100%;padding:7px;background:#6c3fff;border:none;color:#fff;font-size:12px;border-radius:6px;cursor:pointer;margin-top:8px;transition:background .15s}
+.apply-btn:hover{background:#5a2ee6}
+</style>
+
+<div id="studio">
+  <div id="canvas-area">
+    <div id="canvas-bg"></div>
+    <div class="grid-lines"></div>
+    <div class="hint-text" id="hint">
+      <h3>Your canvas awaits</h3>
+      <p>Add images, gradients, or typography from the sidebar →</p>
+    </div>
+    <div id="toast"></div>
+  </div>
+
+  <div id="sidebar">
+    <div class="sb-section">
+      <div class="sb-title">Add elements</div>
+      <div class="tool-row">
+        <button class="tool-btn" onclick="addText()"><i class="ti ti-typography" aria-hidden="true"></i> Text</button>
+        <button class="tool-btn" onclick="addGradient()"><i class="ti ti-circle-half-2" aria-hidden="true"></i> Gradient</button>
+        <button class="tool-btn" onclick="addImage()"><i class="ti ti-photo" aria-hidden="true"></i> Image</button>
+        <button class="tool-btn" onclick="addShape()"><i class="ti ti-square" aria-hidden="true"></i> Shape</button>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-title">Filters</div>
+      <div class="sb-label">Blur <span class="val-badge" id="blur-val">0px</span></div>
+      <input type="range" min="0" max="20" value="0" id="blur-sl" oninput="applyFilter()">
+      <div class="sb-label">Grayscale <span class="val-badge" id="gray-val">0%</span></div>
+      <input type="range" min="0" max="100" value="0" id="gray-sl" oninput="applyFilter()">
+      <div class="sb-label">Brightness <span class="val-badge" id="bright-val">100%</span></div>
+      <input type="range" min="30" max="200" value="100" id="bright-sl" oninput="applyFilter()">
+      <div class="sb-label">Contrast <span class="val-badge" id="contrast-val">100%</span></div>
+      <input type="range" min="30" max="200" value="100" id="contrast-sl" oninput="applyFilter()">
+      <div class="sb-label">Saturate <span class="val-badge" id="sat-val">100%</span></div>
+      <input type="range" min="0" max="300" value="100" id="sat-sl" oninput="applyFilter()">
+      <div class="sb-label">Sepia (vintage) <span class="val-badge" id="sepia-val">0%</span></div>
+      <input type="range" min="0" max="100" value="0" id="sepia-sl" oninput="applyFilter()">
+      <div class="sb-label">Hue Rotate <span class="val-badge" id="hue-val">0°</span></div>
+      <input type="range" min="0" max="360" value="0" id="hue-sl" oninput="applyFilter()">
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-title">Border</div>
+      <div class="sb-label">Width <span class="val-badge" id="bw-val">0px</span></div>
+      <input type="range" min="0" max="20" value="0" id="bw-sl" oninput="applyBorder()">
+      <div class="sb-label">Radius <span class="val-badge" id="br-val">0px</span></div>
+      <input type="range" min="0" max="50" value="0" id="br-sl" oninput="applyBorder()">
+      <div class="sb-label">Border color</div>
+      <div class="color-row" id="border-colors"></div>
+      <div class="sb-label">Style</div>
+      <select id="border-style" onchange="applyBorder()">
+        <option>solid</option><option>dashed</option><option>dotted</option><option>double</option>
+      </select>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-title">Opacity & blend</div>
+      <div class="sb-label">Opacity <span class="val-badge" id="op-val">100%</span></div>
+      <input type="range" min="0" max="100" value="100" id="op-sl" oninput="applyOpacity()">
+      <div class="sb-label">Blend mode</div>
+      <select id="blend-sel" onchange="applyBlend()">
+        <option>normal</option><option>multiply</option><option>screen</option><option>overlay</option><option>hard-light</option><option>soft-light</option><option>color-dodge</option><option>difference</option><option>exclusion</option><option>hue</option><option>saturation</option><option>luminosity</option>
+      </select>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-title">Transform</div>
+      <div class="sb-label">Rotation <span class="val-badge" id="rot-val">0°</span></div>
+      <input type="range" min="-180" max="180" value="0" id="rot-sl" oninput="applyTransform()">
+      <div class="sb-label">Scale <span class="val-badge" id="scale-val">1.0×</span></div>
+      <input type="range" min="20" max="300" value="100" id="scale-sl" oninput="applyTransform()">
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-title">Layers</div>
+      <div id="layers-list" style="display:flex;flex-direction:column;gap:3px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas-area');
+const hint = document.getElementById('hint');
+const layersList = document.getElementById('layers-list');
+let elements = [];
+let selected = null;
+let elCount = 0;
+let dragEl = null, dragOX = 0, dragOY = 0;
+let resizing = false;
+let curBorderColor = '#ffffff';
+
+const GRADIENTS = [
+  'linear-gradient(135deg,#6c3fff,#ff6fb4)',
+  'linear-gradient(135deg,#00c6ff,#0072ff)',
+  'linear-gradient(135deg,#f7971e,#ffd200)',
+  'linear-gradient(135deg,#11998e,#38ef7d)',
+  'linear-gradient(135deg,#fc466b,#3f5efb)',
+  'linear-gradient(135deg,#a18cd1,#fbc2eb)',
+  'linear-gradient(160deg,#0093E9,#80D0C7)',
+  'linear-gradient(135deg,#ff9a9e,#fad0c4)',
+];
+
+const POEMS = [
+  'we are all\nstardust\nand stories',
+  'the moon\ndoes not\napologize\nfor the night',
+  'between the words\nlives the poem',
+  'chaos is\njust order\nwaiting to\nbe found',
+  'she was\nboth the storm\nand the shelter',
+  'burn softly\nburn long',
+  'wild things\ndo not\nexplain themselves',
+  'the sea\ndoes not reward\nthose who are\ntoo anxious',
+];
+
+const IMG_URLS = [
+  'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=300&q=80',
+  'https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9?w=300&q=80',
+  'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=300&q=80',
+  'https://images.unsplash.com/photo-1490750967868-88df5691b41e?w=300&q=80',
+  'https://images.unsplash.com/photo-1444927714506-8492d94b4e3d?w=300&q=80',
+];
+
+const COLORS = ['#ffffff','#a78bfa','#ff6fb4','#00c6ff','#ffd200','#38ef7d','#fc466b','#f97316','#06b6d4'];
+
+function setupBorderColors(){
+  const cont = document.getElementById('border-colors');
+  COLORS.forEach(c=>{
+    const s = document.createElement('div');
+    s.className='color-swatch';
+    s.style.background=c;
+    s.onclick=()=>{curBorderColor=c;cont.querySelectorAll('.color-swatch').forEach(x=>x.classList.remove('picked'));s.classList.add('picked');applyBorder();};
+    cont.appendChild(s);
+  });
+  cont.firstChild.classList.add('picked');
+}
+setupBorderColors();
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.opacity='1';
+  setTimeout(()=>t.style.opacity='0',1800);
+}
+
+function makeEl(type,styles,inner){
+  elCount++;
+  const id = `el-${elCount}`;
+  const wrap = document.createElement('div');
+  wrap.className='canvas-el';
+  wrap.id=id;
+  wrap.dataset.type=type;
+  wrap.dataset.rot='0';
+  wrap.dataset.scale='100';
+  Object.assign(wrap.style,{left:'60px',top:'60px',width:'180px',minHeight:'80px',position:'absolute',...styles});
+  wrap.innerHTML=inner;
+
+  const rh = document.createElement('div');
+  rh.className='resize-handle';
+  rh.style.display='none';
+  wrap.appendChild(rh);
+
+  rh.addEventListener('mousedown',e=>{e.stopPropagation();resizing=true;const startX=e.clientX,startY=e.clientY,startW=wrap.offsetWidth,startH=wrap.offsetHeight;const mm=e2=>{wrap.style.width=Math.max(60,startW+e2.clientX-startX)+'px';wrap.style.height=Math.max(40,startH+e2.clientY-startY)+'px';};const mu=()=>{resizing=false;document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu);});
+
+  wrap.addEventListener('mousedown',e=>{
+    if(resizing)return;
+    selectEl(wrap);
+    const rect=canvas.getBoundingClientRect();
+    dragEl=wrap; dragOX=e.clientX-wrap.offsetLeft; dragOY=e.clientY-wrap.offsetTop;
+    wrap.style.cursor='grabbing';
+    e.preventDefault();
+  });
+
+  canvas.appendChild(wrap);
+  const data={id,el:wrap,type,name:type+' '+elCount};
+  elements.push(data);
+  hint.style.opacity='0';
+  addLayerItem(data);
+  selectEl(wrap);
+
+  wrap.style.animation='none';
+  wrap.style.opacity='0';
+  wrap.style.transform='translateY(12px)';
+  requestAnimationFrame(()=>{
+    wrap.style.transition='opacity .3s ease, transform .3s ease';
+    wrap.style.opacity='1';
+    wrap.style.transform='translateY(0)';
+  });
+  setTimeout(()=>{wrap.style.transition='';applyCurrentTransform(wrap);},320);
+  return wrap;
+}
+
+document.addEventListener('mousemove',e=>{
+  if(!dragEl||resizing)return;
+  const rect=canvas.getBoundingClientRect();
+  dragEl.style.left=Math.max(0,Math.min(e.clientX-dragOX,rect.width-dragEl.offsetWidth))+'px';
+  dragEl.style.top=Math.max(0,Math.min(e.clientY-dragOY,rect.height-dragEl.offsetHeight))+'px';
+});
+document.addEventListener('mouseup',()=>{if(dragEl){dragEl.style.cursor='grab';dragEl=null;}});
+canvas.addEventListener('mousedown',e=>{if(e.target===canvas||e.target.classList.contains('grid-lines')||e.target===document.getElementById('canvas-bg')||e.target===hint){deselectAll();}});
+
+function selectEl(el){
+  deselectAll();
+  selected=el;
+  el.classList.add('selected');
+  el.querySelector('.resize-handle').style.display='block';
+  const data=elements.find(x=>x.el===el);
+  if(data){layersList.querySelectorAll('.layer-item').forEach(l=>{l.classList.toggle('active',l.dataset.id===data.id)});}
+  syncSidebar(el);
+}
+
+function deselectAll(){
+  document.querySelectorAll('.canvas-el.selected').forEach(el=>{el.classList.remove('selected');const rh=el.querySelector('.resize-handle');if(rh)rh.style.display='none';});
+  selected=null;
+}
+
+function syncSidebar(el){
+  const style=el.style;
+  const f=style.filter||'';
+  const getVal=(rx,def)=>{const m=f.match(rx);return m?parseFloat(m[1]):def;};
+  document.getElementById('blur-sl').value=getVal(/blur\((\d+\.?\d*)px\)/,0);
+  document.getElementById('gray-sl').value=getVal(/grayscale\((\d+)%\)/,0);
+  document.getElementById('bright-sl').value=getVal(/brightness\((\d+)%\)/,100);
+  document.getElementById('contrast-sl').value=getVal(/contrast\((\d+)%\)/,100);
+  document.getElementById('sat-sl').value=getVal(/saturate\((\d+)%\)/,100);
+  document.getElementById('sepia-sl').value=getVal(/sepia\((\d+)%\)/,0);
+  document.getElementById('hue-sl').value=getVal(/hue-rotate\((\d+)deg\)/,0);
+  const bw=parseInt(style.borderWidth)||0;
+  document.getElementById('bw-sl').value=bw;
+  document.getElementById('br-sl').value=parseInt(style.borderRadius)||0;
+  document.getElementById('border-style').value=style.borderStyle||'solid';
+  document.getElementById('op-sl').value=Math.round((parseFloat(style.opacity)||1)*100);
+  document.getElementById('blend-sel').value=style.mixBlendMode||'normal';
+  document.getElementById('rot-sl').value=el.dataset.rot||0;
+  document.getElementById('scale-sl').value=el.dataset.scale||100;
+  updateBadges();
+}
+
+function updateBadges(){
+  document.getElementById('blur-val').textContent=document.getElementById('blur-sl').value+'px';
+  document.getElementById('gray-val').textContent=document.getElementById('gray-sl').value+'%';
+  document.getElementById('bright-val').textContent=document.getElementById('bright-sl').value+'%';
+  document.getElementById('contrast-val').textContent=document.getElementById('contrast-sl').value+'%';
+  document.getElementById('sat-val').textContent=document.getElementById('sat-sl').value+'%';
+  document.getElementById('sepia-val').textContent=document.getElementById('sepia-sl').value+'%';
+  document.getElementById('hue-val').textContent=document.getElementById('hue-sl').value+'°';
+  document.getElementById('bw-val').textContent=document.getElementById('bw-sl').value+'px';
+  document.getElementById('br-val').textContent=document.getElementById('br-sl').value+'px';
+  document.getElementById('op-val').textContent=document.getElementById('op-sl').value+'%';
+  document.getElementById('rot-val').textContent=document.getElementById('rot-sl').value+'°';
+  document.getElementById('scale-val').textContent=(document.getElementById('scale-sl').value/100).toFixed(1)+'×';
+}
+
+function applyFilter(){
+  if(!selected)return;
+  updateBadges();
+  const b=document.getElementById('blur-sl').value,g=document.getElementById('gray-sl').value,br=document.getElementById('bright-sl').value,c=document.getElementById('contrast-sl').value,s=document.getElementById('sat-sl').value,se=document.getElementById('sepia-sl').value,h=document.getElementById('hue-sl').value;
+  selected.style.filter=`blur(${b}px) grayscale(${g}%) brightness(${br}%) contrast(${c}%) saturate(${s}%) sepia(${se}%) hue-rotate(${h}deg)`;
+}
+
+function applyBorder(){
+  if(!selected)return;
+  updateBadges();
+  const w=document.getElementById('bw-sl').value,r=document.getElementById('br-sl').value,st=document.getElementById('border-style').value;
+  if(parseInt(w)>0){selected.style.border=`${w}px ${st} ${curBorderColor}`;} else {selected.style.border='none';}
+  selected.style.borderRadius=r+'px';
+}
+
+function applyOpacity(){
+  if(!selected)return;
+  updateBadges();
+  selected.style.opacity=document.getElementById('op-sl').value/100;
+}
+
+function applyBlend(){if(!selected)return;selected.style.mixBlendMode=document.getElementById('blend-sel').value;}
+
+function applyCurrentTransform(el){
+  const rot=el.dataset.rot||0,sc=(el.dataset.scale||100)/100;
+  el.style.transform=`rotate(${rot}deg) scale(${sc})`;
+}
+
+function applyTransform(){
+  if(!selected)return;
+  updateBadges();
+  selected.dataset.rot=document.getElementById('rot-sl').value;
+  selected.dataset.scale=document.getElementById('scale-sl').value;
+  applyCurrentTransform(selected);
+}
+
+function addLayerItem(data){
+  const colors={text:'#a78bfa',gradient:'#ff6fb4',image:'#00c6ff',shape:'#38ef7d'};
+  const item=document.createElement('div');
+  item.className='layer-item';
+  item.dataset.id=data.id;
+  item.innerHTML=`<div class="layer-dot" style="background:${colors[data.type]||'#555'}"></div><span style="font-size:12px;color:#aaa;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${data.name}</span><button class="del-btn" title="Delete">×</button>`;
+  item.querySelector('span').onclick=()=>selectEl(data.el);
+  item.querySelector('.del-btn').onclick=(e)=>{e.stopPropagation();data.el.remove();elements=elements.filter(x=>x.id!==data.id);item.remove();if(selected===data.el)selected=null;if(elements.length===0)hint.style.opacity='1';};
+  item.onclick=()=>selectEl(data.el);
+  layersList.prepend(item);
+}
+
+function addText(){
+  const poem=POEMS[Math.floor(Math.random()*POEMS.length)];
+  const colors=['#ffffff','#a78bfa','#ff6fb4','#ffd200','#38ef7d','#00c6ff'];
+  const color=colors[Math.floor(Math.random()*colors.length)];
+  const sizes=['1.2rem','1.5rem','2rem','2.6rem'];
+  const size=sizes[Math.floor(Math.random()*sizes.length)];
+  const el=makeEl('text',{width:'220px',minHeight:'auto',background:'transparent',padding:'8px'},{});
+  el.innerHTML=`<div contenteditable="true" style="color:${color};font-size:${size};line-height:1.4;font-family:var(--font-serif);white-space:pre-wrap;outline:none;cursor:text">${poem}</div><div class="resize-handle"></div>`;
+  const rh=el.querySelector('.resize-handle');
+  rh.style.display='none';
+  el.querySelector('.resize-handle').addEventListener('mousedown',()=>{});
+  toast('Click to edit text ✦');
+}
+
+function addGradient(){
+  const g=GRADIENTS[Math.floor(Math.random()*GRADIENTS.length)];
+  makeEl('gradient',{width:'200px',height:'140px',background:g,borderRadius:'12px'},{});
+  toast('Gradient added — try blend modes!');
+}
+
+function addImage(){
+  const url=IMG_URLS[Math.floor(Math.random()*IMG_URLS.length)];
+  const el=makeEl('image',{width:'220px',height:'160px',overflow:'hidden',borderRadius:'8px'},{});
+  el.innerHTML=`<img src="${url}&${Date.now()}" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none" crossorigin="anonymous" onerror="this.src='https://picsum.photos/300/200?random=${elCount}'" /><div class="resize-handle"></div>`;
+  toast('Image added ✦');
+}
+
+function addShape(){
+  const shapes=[
+    {w:'120px',h:'120px',br:'50%',bg:'linear-gradient(135deg,#6c3fff,#ff6fb4)'},
+    {w:'160px',h:'80px',br:'8px',bg:'linear-gradient(135deg,#00c6ff,#0072ff)'},
+    {w:'100px',h:'100px',br:'4px',bg:'linear-gradient(45deg,#f7971e,#ffd200)'},
+    {w:'180px',h:'60px',br:'30px',bg:'linear-gradient(135deg,#11998e,#38ef7d)'},
+  ];
+  const s=shapes[Math.floor(Math.random()*shapes.length)];
+  makeEl('shape',{width:s.w,height:s.h,background:s.bg,borderRadius:s.br,minHeight:s.h},{});
+  toast('Shape added ✦');
+}
+
+document.addEventListener('keydown',e=>{
+  if((e.key==='Delete'||e.key==='Backspace')&&selected&&!e.target.hasAttribute('contenteditable')){
+    const data=elements.find(x=>x.el===selected);
+    if(data){document.querySelector(`.layer-item[data-id="${data.id}"] .del-btn`).click();}
+  }
+  if(e.key==='Escape')deselectAll();
+});
+
+setTimeout(()=>{
+  addGradient();
+  setTimeout(()=>{
+    const t=makeEl('text',{width:'260px',minHeight:'auto',background:'transparent',padding:'8px'},{});
+    t.innerHTML=`<div contenteditable="true" style="color:#fff;font-size:2.2rem;line-height:1.3;font-family:var(--font-serif);white-space:pre-wrap;outline:none;cursor:text">between\nthe words\nlives the poem</div><div class="resize-handle" style="display:none"></div>`;
+    t.style.left='80px';t.style.top='120px';
+    setTimeout(()=>{addShape();},300);
+  },200);
+},500);
+</script>
